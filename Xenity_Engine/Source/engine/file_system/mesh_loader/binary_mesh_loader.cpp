@@ -147,14 +147,6 @@ bool BinaryMeshLoader::LoadMesh(MeshData& mesh)
 		{
 			memcpy(subMesh->indices, fileData, indexMemSize);
 			
-			std::string indicesStr = "Indices: ";
-			for (int i = 0; i < subMesh->indexMemSize; i++)
-			{
-				indicesStr += std::to_string(((unsigned char*)fileData)[i]);
-				//meshFile << std::hex << ((unsigned short*)subMesh->indices)[i] << " ";
-			}
-			Debug::Print(indicesStr);
-
 #if defined(__PS3__)
 			for (int indexIndex = 0; indexIndex < index_count; indexIndex++)
 			{

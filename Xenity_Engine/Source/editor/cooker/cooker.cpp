@@ -141,20 +141,7 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 			meshFile.write((char*)&subMesh->indexMemSize, sizeof(uint32_t));
 			meshFile.write((char*)subMesh->data, subMesh->vertexMemSize);
 			meshFile.write((char*)subMesh->indices, subMesh->indexMemSize);
-			// Print in hexa the data of indices
-			std::string indicesStr = "Indices: ";
-			for (int i = 0; i < subMesh->indexMemSize; i++)
-			{
-				indicesStr += std::to_string(((unsigned char*)subMesh->indices)[i]);
-				//meshFile << std::hex << ((unsigned short*)subMesh->indices)[i] << " ";
-			}
-			Debug::Print(indicesStr);
 		}
-
-
-
-
-
 		meshFile.close();
 	}
 	else if (fileInfo.type == FileType::File_Shader) // Cook shader
