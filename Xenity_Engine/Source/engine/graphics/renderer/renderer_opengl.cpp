@@ -99,6 +99,7 @@ void RendererOpengl::Setup()
 	lastSettings.useDepth = true;
 	lastSettings.useLighting = false;
 	lastSettings.useTexture = true;
+	lastSettings.max_depth = false;
 }
 
 void RendererOpengl::Stop()
@@ -341,9 +342,21 @@ void RendererOpengl::DrawSubMesh(const MeshData::SubMesh& subMesh, const Materia
 		glEnable(GL_TEXTURE_2D);
 	}
 
-	if (settings.renderingMode == MaterialRenderingModes::Transparent) 
+	if (settings.renderingMode == MaterialRenderingModes::Transparent || settings.max_depth)
 	{
 		glDepthMask(GL_FALSE);
+	}
+
+	if (lastSettings.max_depth != settings.max_depth)
+	{
+		if (settings.max_depth)
+		{
+			glDepthRange(0.9999f, 1);
+		}
+		else
+		{
+			glDepthRange(0, 1);
+		}
 	}
 
 	// Keep in memory the used settings
@@ -352,6 +365,7 @@ void RendererOpengl::DrawSubMesh(const MeshData::SubMesh& subMesh, const Materia
 	lastSettings.useDepth = settings.useDepth;
 	lastSettings.useLighting = settings.useLighting;
 	lastSettings.useTexture = settings.useTexture;
+	lastSettings.max_depth = settings.max_depth;
 
 	/*glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
 
@@ -409,7 +423,8 @@ void RendererOpengl::DrawSubMesh(const MeshData::SubMesh& subMesh, const Materia
 	}
 	else
 	{
-		glDrawElements(GL_TRIANGLES, subMesh.index_count, GL_UNSIGNED_SHORT, 0);
+		const int indiceMode = subMesh.isShortIndices ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+		glDrawElements(GL_TRIANGLES, subMesh.index_count, indiceMode, 0);
 	}
 	glBindVertexArray(0);
 
@@ -432,6 +447,7 @@ void RendererOpengl::DrawLine(const Vector3& a, const Vector3& b, const Color& c
 	else
 		glDisable(GL_DEPTH_TEST);
 
+	glDepthRange(0, 1);
 	glEnable(GL_BLEND);
 	glDisable(GL_ALPHA_TEST);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -749,7 +765,8 @@ void RendererOpengl::UploadMeshData(MeshData& meshData)
 		if (newSubMesh->EBO == 0)
 			newSubMesh->EBO = CreateBuffer();
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, newSubMesh->EBO);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * newSubMesh->index_count, newSubMesh->indices, GL_STATIC_DRAW);
+		size_t vertexSize = newSubMesh->isShortIndices ? sizeof(unsigned short) : sizeof(unsigned int);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexSize * newSubMesh->index_count, newSubMesh->indices, GL_STATIC_DRAW);
 
 		int stride;
 

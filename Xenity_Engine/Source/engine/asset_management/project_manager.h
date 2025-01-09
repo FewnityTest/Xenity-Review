@@ -14,6 +14,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <set>
 
 #include <engine/reflection/reflection.h>
 #include <engine/event_system/event_system.h>
@@ -47,47 +48,32 @@ public:
 	* Get folder name
 	*/
 	std::string GetFolderName();
+
 	std::string path = "";
 	std::vector<std::shared_ptr<ProjectDirectory>> subdirectories;
 	std::vector<std::shared_ptr<FileReference>> files;
 	uint64_t uniqueId = 0;
 };
 
-class ProjectEngineFile 
-{
-public:
-	std::shared_ptr<File> file = nullptr;
-	bool isEngineAsset = false;
-	uint64_t filePos = 0;
-	uint64_t fileSize= 0;
-	uint64_t metaFilePos = 0;
-	uint64_t metaFileSize = 0;
-};
-
-class CompatibleFile
-{
-public:
-	ProjectEngineFile file;
-	FileType type;
-};
-
 struct FileInfo
 {
-	std::string path;
 	std::shared_ptr<File> file;
-	FileType type;
 
+	// File position/size in the binary file
 	uint64_t filePos = 0;
 	uint64_t fileSize = 0;
 	uint64_t metaFilePos = 0;
 	uint64_t metaFileSize = 0;
+
+	FileType type = FileType::File_Other;
+	bool isEngineAsset = false;
 };
 
 struct FileChange
 {
+	std::string path;
 	bool hasChanged = false;
 	bool hasBeenDeleted = true;
-	std::string path;
 };
 
 class ProjectSettings : public Reflective
@@ -96,12 +82,13 @@ public:
 	std::string gameName = "";
 	std::string projectName = "";
 	std::string companyName = "";
-	std::shared_ptr<Scene> startScene = nullptr;
 	std::string engineVersion = "0.0";
 	std::string compiledLibEngineVersion = "0";
+	std::shared_ptr<Scene> startScene = nullptr;
 	bool isCompiled = false;
 	bool isLibCompiledForDebug = false;
 	bool isLibCompiledFor64Bits = false;
+
 	ReflectiveData GetReflectiveData() override;
 };
 
@@ -167,11 +154,6 @@ public:
 	* @param fileReference save meta file of this file reference
 	*/
 	static void SaveMetaFile(FileReference& fileReference);
-
-	/**
-	* @brief Load project settings
-	*/
-	static void LoadProjectSettings();
 
 	/**
 	* @brief Save project settings
@@ -267,13 +249,6 @@ public:
 	static void FillProjectDirectory(ProjectDirectory& _projectDirectory);
 
 	/**
-	* @brief Create project directories from projectDirectoryBase
-	* @param projectDirectoryBase From
-	* @param realProjectDirectory To
-	*/
-	static void CreateProjectDirectories(Directory& projectDirectoryBase, ProjectDirectory& realProjectDirectory);
-
-	/**
 	* @brief Refresh project directory
 	*/
 	static void RefreshProjectDirectory();
@@ -302,7 +277,7 @@ public:
 	/**
 	* @brief Get all used files by the game
 	*/
-	static std::vector<uint64_t> GetAllUsedFileByTheGame();
+	static std::set<uint64_t> GetAllUsedFileByTheGame();
 
 	/**
 	* @brief Get project directory
@@ -312,16 +287,6 @@ public:
 		return projectDirectory;
 	}
 
-	static uint64_t ReadFileId(const File& file);
-
-	/**
-	* @brief Create a file reference pointer and load the meta file (if editor mode, create a meta file too)
-	* @param path File path
-	* @param id File Id
-	* @return File reference
-	*/
-	static std::shared_ptr<FileReference> CreateFileReference(const std::string& path, const uint64_t id);
-	static std::shared_ptr<FileReference> CreateFileReference(const FileInfo& fileInfo, const uint64_t id);
 	/**
 	* Get the event that is called when a project is loaded
 	*/
@@ -346,12 +311,35 @@ public:
 private:
 
 	/**
+	* @brief Load project settings
+	*/
+	static void LoadProjectSettings();
+
+	/**
+	* @brief Create project directories from projectDirectoryBase
+	* @param projectDirectoryBase From
+	* @param realProjectDirectory To
+	*/
+	static void CreateProjectDirectories(Directory& projectDirectoryBase, ProjectDirectory& realProjectDirectory);
+
+	static uint64_t ReadFileId(const File& file);
+
+	/**
+	* @brief Create a file reference pointer and load the meta file (if editor mode, create a meta file too)
+	* @param path File path
+	* @param id File Id
+	* @return File reference
+	*/
+	static std::shared_ptr<FileReference> CreateFileReference(const std::string& path, const uint64_t id, const FileType type);
+	static std::shared_ptr<FileReference> CreateFileReference(const FileInfo& fileInfo, const uint64_t id);
+
+	/**
 	* @brief Add all files of a directory to a list of project file list
 	* @param projectFilesDestination Destination of the files to add
 	* @param directorySource Source directory
 	* @param isEngineAssets Are the assets to add engine assets?
 	*/
-	static void AddFilesToProjectFiles(std::vector<ProjectEngineFile>& projectFilesDestination, Directory& directorySource, bool isEngineAssets);
+	static void AddFilesToProjectFiles(std::vector<FileInfo>& projectFilesDestination, Directory& directorySource, bool isEngineAssets);
 
 #if defined(EDITOR)
 	/**
@@ -378,6 +366,12 @@ private:
 	* @param fileReference File reference
 	*/
 	static void LoadMetaFile(FileReference& fileReference);
+
+	static void CreateGame();
+
+	static std::vector<FileInfo> GetCompatibleFiles();
+
+	static void CheckAndGenerateFileIds(const std::vector<FileInfo>& compatibleFiles);
 
 	static std::shared_ptr<ProjectDirectory> projectDirectory;
 	static std::unordered_map<uint64_t, FileInfo> projectFilesIds;

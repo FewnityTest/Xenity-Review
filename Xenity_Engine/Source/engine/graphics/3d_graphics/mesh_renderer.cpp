@@ -169,9 +169,14 @@ void MeshRenderer::CreateRenderCommands(RenderBatch& renderBatch)
 		command.isEnabled = IsEnabled() && GetGameObjectRaw()->IsLocalActive();
 		if (material->GetRenderingMode() == MaterialRenderingModes::Opaque || material->GetRenderingMode() == MaterialRenderingModes::Cutout)
 		{
+#if defined(ENABLE_OVERDRAW_OPTIMIZATION)
+			renderBatch.opaqueMeshCommands.push_back(command);
+			renderBatch.opaqueMeshCommandIndex++;
+#else
 			RenderQueue& renderQueue = renderBatch.renderQueues[material->GetFileId()];
 			renderQueue.commands.push_back(command);
 			renderQueue.commandIndex++;
+#endif
 		}
 		else
 		{
@@ -239,9 +244,26 @@ void MeshRenderer::DrawCommand(const RenderCommand& renderCommand)
 	{
 		const size_t lightCount = m_affectedByLights.size();
 
-		const std::shared_ptr<Shader>& shader = renderCommand.material->GetShader();
 		const size_t directionalLightCount = Graphics::s_directionalLights.size();
-
+#if defined(ENABLE_SHADER_VARIANT_OPTIMIZATION)
+		if (lightCount == 0)
+		{
+			if (renderCommand.material->GetShader() != AssetManager::standardShaderNoPointLight)
+			{
+				renderCommand.material->SetShader(AssetManager::standardShaderNoPointLight);
+				Graphics::s_currentMaterial = nullptr;
+			}
+		}
+		else 
+		{
+			if (renderCommand.material->GetShader() != AssetManager::standardShader)
+			{
+				renderCommand.material->SetShader(AssetManager::standardShader);
+				Graphics::s_currentMaterial = nullptr;
+			}
+		}
+#endif
+		const std::shared_ptr<Shader>& shader = renderCommand.material->GetShader();
 		// Check if the lights have changed
 		bool needLightUpdate = Graphics::s_isLightUpdateNeeded;
 		if (!needLightUpdate)
@@ -280,7 +302,7 @@ void MeshRenderer::DrawCommand(const RenderCommand& renderCommand)
 			int spotLightCount = 0;
 
 			LightsIndices lightsIndices;
-			lightsIndices.usedDirectionalLightCount = directionalLightCount;
+			lightsIndices.usedDirectionalLightCount = static_cast<int>(directionalLightCount);
 			shader->m_currentLights = m_affectedByLights;
 			shader->m_currentDirectionalLights = Graphics::s_directionalLights;
 

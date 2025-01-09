@@ -63,7 +63,7 @@ uint32_t* color_buffer[FRAME_BUFFER_COUNT];
 f32 aspect_ratio;
 videoResolution vResolution;
 static uint32_t sResolutionIds[] = {
-	VIDEO_RESOLUTION_1080,
+	//VIDEO_RESOLUTION_1080, // Disable because it's too slow with lighting (too much fragments)
 	VIDEO_RESOLUTION_720,
 	VIDEO_RESOLUTION_480,
 	VIDEO_RESOLUTION_576
@@ -309,8 +309,6 @@ void RendererRSX::init_screen(void* host_addr, uint32_t size)
 
 	depth_buffer = (uint32_t*)rsxMemalign(64, resolution.y * depth_pitch);
 	rsxAddressToOffset(depth_buffer, &depth_offset);
-
-	//debugFontRenderer = new RSXDebugFontRenderer(context);
 }
 
 void RendererRSX::waitflip()
@@ -359,16 +357,51 @@ int RendererRSX::Init()
 	setDrawEnv();
 	setRenderTarget(curr_fb);
 
+	gcmSetFlipMode(GCM_FLIP_HSYNC); // Disable VSYNC
+
+	unsigned char* textureData = new unsigned char[4 * 8 * 32];
+	std::shared_ptr<Texture> newTexture = Texture::MakeTexture();
+	m_lighintDataTexture = std::dynamic_pointer_cast<TexturePS3>(newTexture);
+	m_lighintDataTexture->SetSize(8, 32);
+	m_lighintDataTexture->SetChannelCount(4);
+	m_lighintDataTexture->isFloatFormat = true;
+	m_lighintDataTexture->SetData(textureData);
+	m_lighintDataTexture->SetFilter(Filter::Point);
+	m_lighintDataTexture->SetWrapMode(WrapMode::ClampToEdge);
+
+	// Clear the texture
+	for (size_t i = 0; i < 8 * 32; i += 4)
+	{
+		(((float*)m_lighintDataTexture->m_ps3buffer)[i]) = 0.0f;
+		(((float*)m_lighintDataTexture->m_ps3buffer)[i + 1]) = 0.0f;
+		(((float*)m_lighintDataTexture->m_ps3buffer)[i + 2]) = 0.0f;
+		(((float*)m_lighintDataTexture->m_ps3buffer)[i + 3]) = 0.0f;
+	}
+
 	return result;
 }
 
 void RendererRSX::Setup()
 {
+	lastSettings.invertFaces = false;
+	lastSettings.renderingMode = MaterialRenderingModes::Opaque;
+	lastSettings.useDepth = true;
+	lastSettings.useLighting = false;
+	lastSettings.useTexture = true;
+	lastSettings.max_depth = false;
 }
 
 void RendererRSX::Stop()
 {
 	//sceGuTerm();
+}
+
+void WriteVector4ToFloatBuffer(const Vector4& vector, float* buffer)
+{
+	buffer[0] = vector.x;
+	buffer[1] = vector.y;
+	buffer[2] = vector.z;
+	buffer[3] = vector.w;
 }
 
 void RendererRSX::NewFrame()
@@ -384,6 +417,92 @@ void RendererRSX::NewFrame()
 	// }
 	lastUsedColor = 0x00000000;
 	lastUsedColor2 = 0xFFFFFFFF;
+
+	return;
+	// Update the lights
+	int offset = 1;
+	const int lightCount = AssetManager::GetLightCount();
+
+	int directionalUsed = 0;
+	int pointUsed = 0;
+	int spotUsed = 0;
+
+	//For each lights
+	float* buffer = (float*)m_lighintDataTexture->m_ps3buffer;
+	for (int lightI = 0; lightI < lightCount; lightI++)
+	{
+		const Light& light = *AssetManager::GetLight(lightI);
+		if (light.IsEnabled() && light.GetGameObjectRaw()->IsLocalActive())
+		{
+			if (light.GetType() == LightType::Directional)
+			{
+				if (directionalUsed >= 9)
+				{
+					continue;
+				}
+				const uint32_t row = directionalUsed + offset;
+				const Vector4 lightColor = light.color.GetRGBA().ToVector4() * light.GetIntensity() * 2;
+				Vector3 dir = Vector3(0);
+				dir = light.GetTransformRaw()->GetForward();
+				dir.x = -dir.x;
+
+				WriteVector4ToFloatBuffer(Vector4(dir.x, dir.y, dir.z, 0), buffer + (row * (8*4) + 0));
+				WriteVector4ToFloatBuffer(lightColor,                      buffer + (row * (8*4) + 4));
+
+				directionalUsed++;
+			}
+			else if (light.GetType() == LightType::Point)
+			{
+				if (pointUsed >= 9)
+				{
+					continue;
+				}
+
+				const uint32_t row = 10 + pointUsed + offset;
+				const Vector4 lightColor = light.color.GetRGBA().ToVector4() * light.GetIntensity() * 2;
+				Vector3 pos = Vector3(0);
+				pos = light.GetTransformRaw()->GetPosition();
+				pos.x = -pos.x;
+				Vector4 lightData = Vector4(lightConstant, light.GetLinearValue(), light.GetQuadraticValue(), 0);
+
+				WriteVector4ToFloatBuffer(Vector4(pos.x, pos.y, pos.z, 0), buffer + (row * (8 * 4) + 0));
+				WriteVector4ToFloatBuffer(lightColor,                      buffer + (row * (8 * 4) + 4));
+				WriteVector4ToFloatBuffer(lightData,                       buffer + (row * (8 * 4) + 8));
+
+				pointUsed++;
+			}
+			else if (light.GetType() == LightType::Spot)
+			{
+				if (spotUsed >= 9)
+				{
+					continue;
+				}
+
+				const uint32_t row = 20 + spotUsed + offset;
+				const Vector4 lightColor = light.color.GetRGBA().ToVector4() * light.GetIntensity();
+				Vector3 pos = Vector3(0);
+				pos = light.GetTransformRaw()->GetPosition();
+				pos.x = -pos.x;
+				Vector3 dir = Vector3(0);
+				dir = light.GetTransformRaw()->GetForward();
+				dir.x = -dir.x;
+				Vector4 lightData = Vector4(lightConstant, light.GetLinearValue(), light.GetQuadraticValue(), 0);
+				Vector4 lightData2 = Vector4(glm::cos(glm::radians(light.GetSpotAngle() * (1 - light.GetSpotSmoothness()))), glm::cos(glm::radians(light.GetSpotAngle())), 0, 0);
+
+				WriteVector4ToFloatBuffer(Vector4(pos.x, pos.y, pos.z, 0), buffer + (row * (8 * 4) + 0));
+				WriteVector4ToFloatBuffer(Vector4(dir.x, dir.y, dir.z, 0), buffer + (row * (8 * 4) + 4));
+				WriteVector4ToFloatBuffer(lightColor,                      buffer + (row * (8 * 4) + 8));
+				WriteVector4ToFloatBuffer(lightData,                       buffer + (row * (8 * 4) + 12));
+				WriteVector4ToFloatBuffer(lightData2,                      buffer + (row * (8 * 4) + 16));
+
+				spotUsed++;
+			}
+			/*else if (light.m_type == LightType::Ambient)
+			{
+				ambientLight += light.color.GetRGBA().ToVector4() * light.m_intensity;
+			}*/
+		}
+	}
 }
 
 void RendererRSX::EndFrame()
@@ -486,13 +605,14 @@ void RendererRSX::DrawSubMesh(const MeshData::SubMesh& subMesh, const Material& 
 	DrawSubMesh(subMesh, material, *material.GetTexture(), settings);
 }
 
+uint32_t lastOffset = 0;
+
 void RendererRSX::DrawSubMesh(const MeshData::SubMesh& subMesh, const Material& material, const Texture& texture, RenderingSettings& settings)
 {
 	ShaderRSX& rsxShader = dynamic_cast<ShaderRSX&>(*Graphics::s_currentShader);
+	uint32_t offset = 0;
 
-	uint32_t offset= 0;
-	f32 globalAmbientColor[3] = { 0.8f, 0.7f, 0.7f };
-
+	//return;
 	if (lastSettings.useDepth != settings.useDepth)
 	{
 		if (settings.useDepth)
@@ -526,9 +646,23 @@ void RendererRSX::DrawSubMesh(const MeshData::SubMesh& subMesh, const Material& 
 		}
 	}
 
-	if (settings.renderingMode == MaterialRenderingModes::Transparent)
+	if (settings.renderingMode == MaterialRenderingModes::Transparent || settings.max_depth)
 	{
 		rsxSetDepthWriteEnable(context, GCM_FALSE);
+	}
+
+	if (lastSettings.max_depth != settings.max_depth)
+	{
+		if (settings.max_depth)
+		{
+			rsxSetDepthBounds(context, 0.9999f, 1);
+			rsxSetDepthBoundsTestEnable(context, GCM_TRUE);
+		}
+		else
+		{
+			rsxSetDepthBounds(context, 0, 1);
+			rsxSetDepthBoundsTestEnable(context, GCM_FALSE);
+		}
 	}
 
 	//Keep in memory the used settings
@@ -537,35 +671,34 @@ void RendererRSX::DrawSubMesh(const MeshData::SubMesh& subMesh, const Material& 
 	lastSettings.useDepth = settings.useDepth;
 	lastSettings.useLighting = settings.useLighting;
 	lastSettings.useTexture = settings.useTexture;
+	lastSettings.max_depth = settings.max_depth;
 
 	const TexturePS3& ps3Texture = dynamic_cast<const TexturePS3&>(texture);
 	if (usedTexture != ps3Texture.m_ps3buffer)
 	{
 		usedTexture = ps3Texture.m_ps3buffer;
 		texture.Bind();
+		//m_lighintDataTexture->Bind();
 	}
 
 	// Set vertex array attributes
+	if(lastOffset != subMesh.positionOffset)
 	{
 		if((int)subMesh.meshData->GetVertexDescriptor() & (int)VertexElements::NORMAL_32_BITS)
 		{
-			rsxAddressToOffset(&((VertexNormalsNoColor*)subMesh.data)[0].normX, &offset);
-			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_NORMAL, 0, offset, sizeof(VertexNormalsNoColor), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_NORMAL, 0, subMesh.normalOffset, sizeof(VertexNormalsNoColor), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
-			rsxAddressToOffset(&((VertexNormalsNoColor*)subMesh.data)[0].u, &offset);
-			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0, offset, sizeof(VertexNormalsNoColor), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0, subMesh.uvOffset, sizeof(VertexNormalsNoColor), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
-			rsxAddressToOffset(&((VertexNormalsNoColor*)subMesh.data)[0].x, &offset);
-			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, offset, sizeof(VertexNormalsNoColor), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, subMesh.positionOffset, sizeof(VertexNormalsNoColor), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 		}
 		else
 		{
-			rsxAddressToOffset(&((VertexNoColor*)subMesh.data)[0].u, &offset);
-			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0, offset, sizeof(VertexNoColor), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0, subMesh.uvOffset, sizeof(VertexNoColor), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
-			rsxAddressToOffset(&((VertexNoColor*)subMesh.data)[0].x, &offset);
-			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, offset, sizeof(VertexNoColor), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+			rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, subMesh.positionOffset, sizeof(VertexNoColor), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 		}
+		lastOffset = subMesh.positionOffset;
 	}
 
 	if (lastUsedColor != material.GetColor().GetUnsignedIntRGBA() || lastUsedColor2 != subMesh.meshData->unifiedColor.GetUnsignedIntRGBA() || (!Graphics::s_UseOpenGLFixedFunctions && lastShaderIdUsedColor != material.GetShader()->m_fileId))
@@ -581,16 +714,16 @@ void RendererRSX::DrawSubMesh(const MeshData::SubMesh& subMesh, const Material& 
 	// While rsxSetUpdateFragmentProgramParameter is missing, we have to set the fragment shader to apply rsxSetFragmentProgramParameter calls
 	rsxShader.Use();
 
-	rsxSetUserClipPlaneControl(context, GCM_USER_CLIP_PLANE_DISABLE,
-		GCM_USER_CLIP_PLANE_DISABLE,
-		GCM_USER_CLIP_PLANE_DISABLE,
-		GCM_USER_CLIP_PLANE_DISABLE,
-		GCM_USER_CLIP_PLANE_DISABLE,
-		GCM_USER_CLIP_PLANE_DISABLE);
+	//rsxSetUserClipPlaneControl(context, GCM_USER_CLIP_PLANE_DISABLE,
+	//	GCM_USER_CLIP_PLANE_DISABLE,
+	//	GCM_USER_CLIP_PLANE_DISABLE,
+	//	GCM_USER_CLIP_PLANE_DISABLE,
+	//	GCM_USER_CLIP_PLANE_DISABLE,
+	//	GCM_USER_CLIP_PLANE_DISABLE);
 
-	rsxAddressToOffset(&subMesh.indices[0], &offset);
-	rsxInvalidateVertexCache(context);
-	rsxDrawIndexArray(context, GCM_TYPE_TRIANGLES, offset, subMesh.index_count, GCM_INDEX_TYPE_16B, GCM_LOCATION_RSX);
+	//rsxInvalidateVertexCache(context);
+	const int indiceMode = subMesh.isShortIndices ? GCM_INDEX_TYPE_16B : GCM_INDEX_TYPE_32B;
+	rsxDrawIndexArray(context, GCM_TYPE_TRIANGLES, subMesh.indicesOffset, subMesh.index_count, indiceMode, GCM_LOCATION_RSX);
 	rsxSetDepthWriteEnable(context, GCM_TRUE);
 }
 

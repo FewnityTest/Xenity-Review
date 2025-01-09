@@ -1,9 +1,22 @@
 #pragma once
 
 //
+// -------------------------------------------------- Features
+//
+//#define ENABLE_EXPERIMENTAL_FEATURES // Enable features that are not fully tested or implemented
+//#define ENABLE_OVERDRAW_OPTIMIZATION // Enable overdraw optimization (currently not great)
+//#define ENABLE_SHADER_VARIANT_OPTIMIZATION // Enable shader variant optimization (currently effective only on PS3, WIP)
+
+#if defined(__PS3__)
+//#define ENABLE_OVERDRAW_OPTIMIZATION
+//#define ENABLE_SHADER_VARIANT_OPTIMIZATION
+#endif
+
+//
 // -------------------------------------------------- Version
 //
-#define ENGINE_VERSION "0.1"
+// Increase those numbers when you make a new release
+#define ENGINE_VERSION "0.1.0"
 #define ENGINE_DLL_VERSION "2" // Increase by one this number to invalidate compiled Dlls of games projects
 
 //
@@ -71,7 +84,7 @@
 //
 // -------------------------------------------------- Profiling
 //
-
+#define USE_PROFILER
 #if defined(EDITOR)
 #define USE_PROFILER
 #endif

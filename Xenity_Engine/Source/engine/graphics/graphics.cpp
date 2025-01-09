@@ -43,6 +43,7 @@
 #include <engine/world_partitionner/world_partitionner.h>
 #include <engine/debug/stack_debug_object.h>
 #include <engine/time/time.h>
+#include <engine/constants.h>
 #include "shader_opengl.h"
 
 std::vector<std::weak_ptr<Camera>> Graphics::cameras;
@@ -208,6 +209,10 @@ void Graphics::Draw()
 			// Update camera and bind frame buffer
 			usedCamera->UpdateProjection();
 			usedCamera->UpdateFrustum();
+			if constexpr (!s_UseOpenGLFixedFunctions)
+			{
+				usedCamera->UpdateViewMatrix();
+			}
 			usedCamera->BindFrameBuffer();
 			const Vector3& camPos = usedCamera->GetTransformRaw()->GetPosition();
 
@@ -223,9 +228,9 @@ void Graphics::Draw()
 				UpdateShadersCameraMatrices();
 			}
 
-			DrawSkybox(camPos);
+			//DrawSkybox(camPos);
 
-			Engine::GetRenderer().SetFog(s_settings.isFogEnabled);
+			//Engine::GetRenderer().SetFog(s_settings.isFogEnabled);
 
 			{
 				SCOPED_PROFILER("Graphics::CallOnNewRender", scopeBenchmarkNewRender);
@@ -235,6 +240,7 @@ void Graphics::Draw()
 				}
 			}
 
+#if !defined(ENABLE_OVERDRAW_OPTIMIZATION)
 			{
 				SCOPED_PROFILER("Graphics::RenderOpaque", scopeBenchmarkRenderOpaque);
 				for (const auto& renderQueue : renderBatch.renderQueues)
@@ -246,6 +252,18 @@ void Graphics::Draw()
 					}
 				}
 			}
+#else
+			{
+				SCOPED_PROFILER("Graphics::RenderOpaque", scopeBenchmarkRenderOpaque);
+				for (const RenderCommand& com : renderBatch.opaqueMeshCommands)
+				{
+					if (com.isEnabled)
+						com.drawable->DrawCommand(com);
+				}
+			}
+#endif
+
+			DrawSkybox(camPos);
 
 			{
 				SCOPED_PROFILER("Graphics::RenderTransparent", scopeBenchmarkRenderTransparent);
@@ -395,56 +413,16 @@ void Graphics::Draw()
 	//usedCamera.reset();
 }
 
-//bool spriteComparator(const std::weak_ptr<IDrawable>& t1, const std::weak_ptr<IDrawable>& t2)
-//{
-//	if (t1.lock()->type == IDrawableTypes::Draw_3D && t2.lock()->type == IDrawableTypes::Draw_3D)
-//	{
-//		return false;
-//	}
-//	if (t2.lock()->type == IDrawableTypes::Draw_2D && t1.lock()->type == IDrawableTypes::Draw_3D)
-//	{
-//		return true;
-//	}
-//	if (t1.lock()->type == IDrawableTypes::Draw_2D && t2.lock()->type == IDrawableTypes::Draw_3D)
-//	{
-//		return false;
-//	}
-//	if (t2.lock()->type == IDrawableTypes::Draw_UI && t1.lock()->type != IDrawableTypes::Draw_UI)
-//	{
-//		return true;
-//	}
-//
-//	const int priority1 = t1.lock()->GetDrawPriority();
-//	const int priority2 = t2.lock()->GetDrawPriority();
-//
-//	if (priority1 <= priority2)
-//	{
-//		if (priority1 == priority2)
-//		{
-//			return t1.lock()->GetTransform()->GetPosition().z > t2.lock()->GetTransform()->GetPosition().z;
-//		}
-//
-//		return true;
-//	}
-//
-//	return false;
-//}
-//
-//bool meshComparator(const std::weak_ptr<IDrawable>& t1, const std::weak_ptr<IDrawable>& t2)
-//{
-//	const Vector3& pos1 = t1.lock()->GetTransform()->GetPosition();
-//	const Vector3& pos2 = t2.lock()->GetTransform()->GetPosition();
-//	const Vector3& camPos = Graphics::usedCamera.lock()->GetTransform()->GetPosition();
-//	const float dis1 = Vector3::Distance(pos1, camPos);
-//	const float dis2 = Vector3::Distance(pos2, camPos);
-//
-//	return dis1 > dis2;
-//}
-
 Vector3 meshComparatorCamPos;
+
 bool meshComparator2(const RenderCommand& c1, const RenderCommand& c2)
 {
 	return Vector3::Distance(c1.transform->GetPosition(), meshComparatorCamPos) > Vector3::Distance(c2.transform->GetPosition(), meshComparatorCamPos);
+}
+
+bool meshComparator3(const RenderCommand& c1, const RenderCommand& c2)
+{
+	return Vector3::Distance(c2.transform->GetPosition(), meshComparatorCamPos) > Vector3::Distance(c1.transform->GetPosition(), meshComparatorCamPos);
 }
 
 void Graphics::SortTransparentDrawables()
@@ -454,6 +432,9 @@ void Graphics::SortTransparentDrawables()
 	SCOPED_PROFILER("Graphics::SortTransparentDrawables", scopeBenchmark);
 	meshComparatorCamPos = usedCamera->GetTransformRaw()->GetPosition();
 	std::sort(renderBatch.transparentMeshCommands.begin(), renderBatch.transparentMeshCommands.begin() + renderBatch.transparentMeshCommandIndex, meshComparator2);
+#if defined(ENABLE_OVERDRAW_OPTIMIZATION)
+	std::sort(renderBatch.opaqueMeshCommands.begin(), renderBatch.opaqueMeshCommands.begin() + renderBatch.opaqueMeshCommandIndex, meshComparator3);
+#endif
 }
 
 void Graphics::OrderDrawables()
@@ -571,7 +552,7 @@ void Graphics::DrawSubMesh(const MeshData::SubMesh& subMesh, Material& material,
 {
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
 
-	SCOPED_PROFILER("Graphics::DrawSubMesh", scopeBenchmark);
+	//SCOPED_PROFILER("Graphics::DrawSubMesh", scopeBenchmark);
 
 	XASSERT(usedCamera != nullptr, "[Graphics::DrawSubMesh] usedCamera is nullptr");
 
@@ -658,9 +639,10 @@ void Graphics::DrawSkybox(const Vector3& cameraPosition)
 		RenderingSettings renderSettings = RenderingSettings();
 		renderSettings.invertFaces = false;
 		renderSettings.renderingMode = MaterialRenderingModes::Opaque;
-		renderSettings.useDepth = false;
+		renderSettings.useDepth = true;
 		renderSettings.useTexture = true;
 		renderSettings.useLighting = false;
+		renderSettings.max_depth = true;
 
 		const std::shared_ptr<Texture> texture = AssetManager::unlitMaterial->m_texture;
 

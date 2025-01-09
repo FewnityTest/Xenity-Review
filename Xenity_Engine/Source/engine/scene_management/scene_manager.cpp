@@ -45,7 +45,7 @@ void SceneManager::SaveScene(SaveSceneType saveType)
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
 
 	std::unordered_map<uint64_t, bool> usedIds;
-	std::vector<uint64_t> usedFilesIds;
+	std::set<uint64_t> usedFilesIds;
 
 	// Use ordered json to keep gameobject's order
 	ordered_json j;
@@ -114,7 +114,7 @@ void SceneManager::SaveScene(SaveSceneType saveType)
 	// Add skybox file to the usedFile list
 	if (Graphics::s_settings.skybox != nullptr)
 	{
-		usedFilesIds.push_back(Graphics::s_settings.skybox->m_fileId);
+		usedFilesIds.insert(Graphics::s_settings.skybox->m_fileId);
 	}
 
 	// Save the usedFilesIds list
@@ -240,12 +240,16 @@ void SceneManager::LoadScene(const ordered_json& jsonData)
 	// Automaticaly start the game if built in engine mode
 #if !defined(EDITOR)
 	GameplayManager::SetGameState(GameState::Starting, true);
+#else
+	if (GameplayManager::GetGameState() == GameState::Playing)
+	{
+		GameplayManager::SetGameState(GameState::Starting, true);
+	}
 #endif
 
 	ClearScene();
 
 	std::vector<std::shared_ptr<Component>> allComponents;
-	uint64_t biggestId = 0;
 
 	if (jsonData.contains("GameObjects"))
 	{
@@ -256,10 +260,7 @@ void SceneManager::LoadScene(const ordered_json& jsonData)
 			// Set gameobject id
 			const uint64_t id = std::stoull(gameObjectKV.key());
 			newGameObject->SetUniqueId(id);
-			if (id > biggestId)
-			{
-				biggestId = id;
-			}
+
 			// Fill gameobjet's values from json
 			ReflectionUtils::JsonToReflective(gameObjectKV.value(), *newGameObject.get());
 
@@ -273,10 +274,7 @@ void SceneManager::LoadScene(const ordered_json& jsonData)
 
 					// Get and set component id
 					const uint64_t compId = std::stoull(componentKV.key());
-					if (compId > biggestId)
-					{
-						biggestId = compId;
-					}
+
 					if (comp)
 					{
 						// Enable or disable component
@@ -311,9 +309,6 @@ void SceneManager::LoadScene(const ordered_json& jsonData)
 				}
 			}
 		}
-
-		// Set the current unique id counter to the biggestId found in the scene
-		UniqueId::lastUniqueId = biggestId;
 
 		// Set gameobjects parents
 		for (auto& kv : jsonData["GameObjects"].items())
@@ -409,17 +404,13 @@ void SceneManager::LoadScene(const ordered_json& jsonData)
 			for (int i = 0; i < componentsToInitCount; i++)
 			{
 				const std::shared_ptr<Component>& componentToInit = orderedComponentsToInit[i];
-				if (!componentToInit->m_isAwakeCalled && componentToInit->GetGameObject()->IsLocalActive())
+				if (!componentToInit->m_isAwakeCalled && componentToInit->GetGameObject()->IsLocalActive() && componentToInit->IsEnabled())
 				{
 					componentToInit->Awake();
 					componentToInit->m_isAwakeCalled = true;
 				}
 			}
 		}
-	}
-	else
-	{
-		UniqueId::lastUniqueId = 0;
 	}
 
 	// Load lighting values
@@ -430,9 +421,12 @@ void SceneManager::LoadScene(const ordered_json& jsonData)
 	}
 
 	// Automaticaly set the game in play mode if built in engine mode
-#if !defined(EDITOR)
-	GameplayManager::SetGameState(GameState::Playing, true);
-#endif
+//#if !defined(EDITOR)
+	if (GameplayManager::GetGameState() == GameState::Starting)
+	{
+		GameplayManager::SetGameState(GameState::Playing, true);
+	}
+//#endif
 }
 
 void SceneManager::LoadScene(const std::shared_ptr<Scene>& scene)

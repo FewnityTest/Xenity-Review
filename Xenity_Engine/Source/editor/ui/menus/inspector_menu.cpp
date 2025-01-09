@@ -65,9 +65,9 @@ void InspectorMenu::Draw()
 
 		CalculateWindowValues();
 
-		if(isFocused)
+		if (isFocused)
 			areWindowsFocused = true;
-		
+
 		if (!areWindowsFocused)
 		{
 			StopAudio();
@@ -80,7 +80,7 @@ void InspectorMenu::Draw()
 		ResetWindowValues();
 		StopAudio();
 	}
-	if (!isActive) 
+	if (!isActive)
 	{
 		StopAudio();
 	}
@@ -255,12 +255,14 @@ void InspectorMenu::DrawFilePreview()
 		{
 			const size_t playedSoundCount = AudioManager::s_channel->m_playedSounds.size();
 			AudioClipStream* stream = nullptr;
+			PlayedSound* playedSound = nullptr;
 			for (size_t i = 0; i < playedSoundCount; i++)
 			{
 				if (AudioManager::s_channel->m_playedSounds[i]->m_audioSource.lock() == Editor::audioSource.lock())
 				{
 					// Get audio stream
 					stream = AudioManager::s_channel->m_playedSounds[i]->m_audioClipStream.get();
+					playedSound = AudioManager::s_channel->m_playedSounds[i];
 					break;
 				}
 			}
@@ -307,7 +309,7 @@ void InspectorMenu::DrawFilePreview()
 			if (stream)
 			{
 				// Get audio stream info
-				const float seekPos = (float)(stream->GetSeekPosition() / (double)stream->GetSampleCount());
+				const float seekPos = (float)(playedSound->m_audioSeekPosition / (double)stream->GetSampleCount());
 				const float totalTime = (float)(stream->GetSampleCount() / (double)stream->GetFrequency());
 
 				// Draw current time
@@ -362,8 +364,8 @@ void InspectorMenu::DrawFilePreview()
 		else
 			ImGui::Text("No preview available");
 
-			if (ImGui::IsWindowFocused())
-				areWindowsFocused = true;
+		if (ImGui::IsWindowFocused())
+			areWindowsFocused = true;
 
 		ImGui::EndChild();
 	}
@@ -720,11 +722,14 @@ void InspectorMenu::DrawComponentsHeaders(const GameObject& selectedGameObject)
 		// Draw component enabled checkbox
 		ImGui::SetCursorPosX(62);
 		ImGui::SetCursorPosY(cursorY);
-		const bool isEnabledChanged = ImGui::Checkbox(EditorUI::GenerateItemId().c_str(), &isEnable);
-		if (isEnabledChanged)
+		if (comp->m_canBeDisabled)
 		{
-			auto command = std::make_shared<InspectorItemSetActiveCommand<Component>>(*comp, isEnable);
-			CommandManager::AddCommandAndExecute(command);
+			const bool isEnabledChanged = ImGui::Checkbox(EditorUI::GenerateItemId().c_str(), &isEnable);
+			if (isEnabledChanged)
+			{
+				auto command = std::make_shared<InspectorItemSetActiveCommand<Component>>(*comp, isEnable);
+				CommandManager::AddCommandAndExecute(command);
+			}
 		}
 
 		//Draw component title

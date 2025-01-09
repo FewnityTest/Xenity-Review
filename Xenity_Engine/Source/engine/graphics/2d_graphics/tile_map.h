@@ -4,6 +4,8 @@
 //
 // This file is part of Xenity Engine
 
+#if defined(ENABLE_EXPERIMENTAL_FEATURES)
+
 #pragma once
 #include <vector>
 
@@ -170,3 +172,5 @@ protected:
 	int textureSize;
 	int chunkCount;
 };
+
+#endif // ENABLE_EXPERIMENTAL_FEATURES

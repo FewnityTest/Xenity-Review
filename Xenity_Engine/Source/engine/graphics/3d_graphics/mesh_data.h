@@ -20,6 +20,7 @@
 #include <engine/vectors/vector3.h>
 #include <engine/file_system/file_reference.h>
 #include <engine/graphics/3d_graphics/sphere.h>
+#include <engine/graphics/texture.h>
 
 enum class VertexElements : uint32_t
 {
@@ -69,7 +70,7 @@ struct VertexNormalsNoColorNoUv
 	float x, y, z;
 };
 
-class API MeshData : public FileReference, public Reflective
+class API MeshData : public FileReference
 {
 public:
 	class SubMesh
@@ -78,7 +79,7 @@ public:
 		SubMesh() = default;
 		void FreeData();
 		~SubMesh();
-		unsigned short *indices = nullptr;
+		void *indices = nullptr;
 		MeshData* meshData = nullptr;
 		void *data = nullptr;
 		uint32_t vertexMemSize = 0;
@@ -102,10 +103,16 @@ public:
 		unsigned int EBO = 0;
 		unsigned int VAO = 0;
 #endif
-
+#if defined(__PS3__)
+		uint32_t normalOffset = 0;
+		uint32_t uvOffset = 0;
+		uint32_t positionOffset = 0;
+		uint32_t indicesOffset = 0;
+#endif
 #if defined(__PSP__)
 		bool isOnVram = true;
 #endif
+		bool isShortIndices = true;
 	};
 
 	MeshData();

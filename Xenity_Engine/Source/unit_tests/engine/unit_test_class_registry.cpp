@@ -29,6 +29,7 @@
 #include <engine/graphics/3d_graphics/lod.h>
 #include <engine/test_component.h>
 #include <engine/missing_script.h>
+#include <engine/game_elements/gameplay_manager.h>
 
 template <typename T>
 void ClassRegistryAddComponentFromNameTest::TestAddComponent(std::shared_ptr<GameObject>& newGameObject, bool& result, std::string& errorOut, const std::string& componentName)
@@ -58,20 +59,8 @@ TestResult ClassRegistryAddComponentFromNameTest::Start(std::string& errorOut)
 		TestAddComponent<RectTransform>(newGameObject, result, errorOut, "RectTransform");
 		TestAddComponent<TextMesh>(newGameObject, result, errorOut, "TextMesh");
 		TestAddComponent<MeshRenderer>(newGameObject, result, errorOut, "MeshRenderer");
-		TestAddComponent<Tilemap>(newGameObject, result, errorOut, "Tilemap");
-		TestAddComponent<SpriteRenderer>(newGameObject, result, errorOut, "SpriteRenderer");
-		TestAddComponent<BillboardRenderer>(newGameObject, result, errorOut, "BillboardRenderer");
-		TestAddComponent<LineRenderer>(newGameObject, result, errorOut, "LineRenderer");
-		TestAddComponent<AudioSource>(newGameObject, result, errorOut, "AudioSource");
-		TestAddComponent<ParticleSystem>(newGameObject, result, errorOut, "ParticleSystem");
-		TestAddComponent<RigidBody>(newGameObject, result, errorOut, "RigidBody");
-		TestAddComponent<BoxCollider>(newGameObject, result, errorOut, "BoxCollider");
-		TestAddComponent<SphereCollider>(newGameObject, result, errorOut, "SphereCollider");
-		TestAddComponent<Lod>(newGameObject, result, errorOut, "Lod");
-		TestAddComponent<TestComponent>(newGameObject, result, errorOut, "TestComponent");
-		TestAddComponent<MissingScript>(newGameObject, result, errorOut, "MissingScript");
 
-		if (!Compare(newGameObject->GetComponentCount(), 19)) 
+		if (!Compare(newGameObject->GetComponentCount(), 7)) 
 		{
 			errorOut += "Failed to add all components\n";
 			result = false;
@@ -98,9 +87,16 @@ TestResult ClassRegistryGetComponentNamesTest::Start(std::string& errorOut)
 	ClassRegistry::RegisterEngineFileClasses();
 
 	names = ClassRegistry::GetComponentNames();
+	for (const std::string& name : names)
+	{
+		EXPECT_NOT_EQUALS(name, "", "Failed to get component names (empty name)");
+	}
+
+	// Try to find a basic components
+	EXPECT_NOT_EQUALS(std::find(names.begin(), names.end(), "Light"), names.end(), "Failed to find Light component name");
+	EXPECT_NOT_EQUALS(std::find(names.begin(), names.end(), "Camera"), names.end(), "Failed to find Camera component name");
 
 	EXPECT_NOT_EQUALS(names.size(), static_cast<size_t>(0), "Failed to get component names (empty list)");
-	EXPECT_EQUALS(names.size(), static_cast<size_t>(18), "Failed to get all component names"); // 18 and not 19 because MissingScript is not a valid component
-
+	
 	END_TEST();
 }

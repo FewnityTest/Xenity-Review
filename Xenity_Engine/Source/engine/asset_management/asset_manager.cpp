@@ -19,6 +19,7 @@
 #include <engine/graphics/texture.h>
 #include <engine/graphics/skybox.h>
 #include <engine/graphics/ui/font.h>
+#include <engine/graphics/3d_graphics/mesh_data.h>
 #include <engine/game_elements/gameobject.h>
 
 #include <engine/scene_management/scene.h>
@@ -43,21 +44,12 @@ int AssetManager::fileReferenceCount = 0;
 int AssetManager::lightCount = 0;
 
 std::shared_ptr<Shader> AssetManager::standardShader = nullptr;
-std::shared_ptr<Shader> AssetManager::standardOneLightEachShader = nullptr;
-std::shared_ptr<Shader> AssetManager::standardOnePointLightShader = nullptr;
-std::shared_ptr<Shader> AssetManager::standardOneSpotLightShader = nullptr;
-std::shared_ptr<Shader> AssetManager::standardOneDirectionalLightShader = nullptr;
-std::shared_ptr<Shader> AssetManager::standardVertexLightShader = nullptr;
+#if defined(ENABLE_SHADER_VARIANT_OPTIMIZATION)
+std::shared_ptr<Shader> AssetManager::standardShaderNoPointLight = nullptr;
+#endif
 std::shared_ptr<Shader> AssetManager::unlitShader = nullptr;
-std::shared_ptr<Shader> AssetManager::lineShader = nullptr;
 std::shared_ptr<Material> AssetManager::standardMaterial = nullptr;
-std::shared_ptr<Material> AssetManager::standardOneLightEachMaterial = nullptr;
-std::shared_ptr<Material> AssetManager::standardOnePointLightMaterial = nullptr;
-std::shared_ptr<Material> AssetManager::standardOneSpotLightMaterial = nullptr;
-std::shared_ptr<Material> AssetManager::standardOneDirectionalLightMaterial = nullptr;
-std::shared_ptr<Material> AssetManager::standardVertexLightMaterial = nullptr;
 std::shared_ptr<Material> AssetManager::unlitMaterial = nullptr;
-std::shared_ptr<Material> AssetManager::lineMaterial = nullptr;
 
 std::shared_ptr<Texture> AssetManager::defaultTexture = nullptr;
 
@@ -81,67 +73,37 @@ void AssetManager::OnProjectLoaded()
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
 
 	defaultTexture = AssetManager::LoadEngineAsset<Texture>("public_engine_assets/textures/default_texture.png");
+	XASSERT(defaultTexture != nullptr, "[AssetManager::OnProjectLoaded] Default Texture is null");
 	defaultTexture->LoadFileReference();
 
 	if constexpr (!Graphics::s_UseOpenGLFixedFunctions)
 	{
 		// Load shaders
 		standardShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard.shader");
-		// standardOneLightEachShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard_one_light_each.shader");
-		// standardOnePointLightShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard_one_point_light.shader");
-		// standardOneSpotLightShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard_one_spot_light.shader");
-		// standardOneDirectionalLightShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard_one_directional_light.shader");
-		//standardVertexLightShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard_vertex_lighting.shader");
-		unlitShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/unlit.shader");
-		//lineShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/line.shader");
-
 		XASSERT(standardShader != nullptr, "[AssetManager::OnProjectLoaded] Standard Shader is null");
-		// XASSERT(standardOneLightEachShader != nullptr, "[AssetManager::OnProjectLoaded] Standard One Light Shader is null");
-		// XASSERT(standardOnePointLightShader != nullptr, "[AssetManager::OnProjectLoaded] Standard One Point Light Shader is null");
-		// XASSERT(standardOneSpotLightShader != nullptr, "[AssetManager::OnProjectLoaded] Standard One Spot Light Shader is null");
-		// XASSERT(standardOneDirectionalLightShader != nullptr, "[AssetManager::OnProjectLoaded] Standard One Directional Light Shader is null");
-		//XASSERT(standardVertexLightShader != nullptr, "[AssetManager::OnProjectLoaded] Standard Vertex Lighting Material is null")
-		XASSERT(unlitShader != nullptr, "[AssetManager::OnProjectLoaded] Unlit Shader is null");
-		//XASSERT(lineShader != nullptr, "[AssetManager::OnProjectLoaded] Line Shader is null")
-
 		standardShader->LoadFileReference();
-		// standardOneLightEachShader->LoadFileReference();
-		// standardOnePointLightShader->LoadFileReference();
-		// standardOneSpotLightShader->LoadFileReference();
-		// standardOneDirectionalLightShader->LoadFileReference();
-		//standardVertexLightShader->LoadFileReference();
+
+#if defined(ENABLE_SHADER_VARIANT_OPTIMIZATION)
+		standardShaderNoPointLight = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/standard_no_point_light.shader");
+		XASSERT(standardShaderNoPointLight != nullptr, "[AssetManager::OnProjectLoaded] Standard No Point Light Shader is null");
+		standardShaderNoPointLight->LoadFileReference();
+#endif
+
+		unlitShader = AssetManager::LoadEngineAsset<Shader>("public_engine_assets/shaders/unlit.shader");
+		XASSERT(unlitShader != nullptr, "[AssetManager::OnProjectLoaded] Unlit Shader is null");
 		unlitShader->LoadFileReference();
-		//lineShader->LoadFileReference();
 	}
 
 	// Load materials
 	standardMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/standardMaterial.mat");
-	// standardOneLightEachMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/standardMaterialOneLightEach.mat");
-	// standardOnePointLightMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/standardMaterialOnePointLight.mat");
-	// standardOneSpotLightMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/standardMaterialOneSpotLight.mat");
-	// standardOneDirectionalLightMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/standardMaterialOneDirectionalLight.mat");
-	//standardVertexLightMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/standardVertexLightingMaterial.mat");
-	unlitMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/unlitMaterial.mat");
-	//lineMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/lineMaterial.mat");
-
 	XASSERT(standardMaterial != nullptr, "[AssetManager::OnProjectLoaded] Standard Material is null");
-	// XASSERT(standardOneLightEachMaterial != nullptr, "[AssetManager::OnProjectLoaded] Standard One Light Material is null");
-	// XASSERT(standardOnePointLightMaterial != nullptr, "[AssetManager::OnProjectLoaded] Standard One Point Light Material is null");
-	// XASSERT(standardOneSpotLightMaterial != nullptr, "[AssetManager::OnProjectLoaded] Standard One Spot Light Material is null");
-	// XASSERT(standardOneDirectionalLightMaterial != nullptr, "[AssetManager::OnProjectLoaded] Standard One Directional Light Material is null");
-	//XASSERT(standardVertexLightMaterial != nullptr, "[AssetManager::OnProjectLoaded] Standard Vertex Lighting Material is null");
-	XASSERT(unlitMaterial != nullptr, "[AssetManager::OnProjectLoaded] Unlit Material is null");
-	//XASSERT(lineMaterial != nullptr, "[AssetManager::OnProjectLoaded] Line Material is null");
-
 	standardMaterial->LoadFileReference();
-	// standardOneLightEachMaterial->LoadFileReference();
-	// standardOnePointLightMaterial->LoadFileReference();
-	// standardOneSpotLightMaterial->LoadFileReference();
-	// standardOneDirectionalLightMaterial->LoadFileReference();
-	//standardVertexLightMaterial->LoadFileReference();
-	unlitMaterial->LoadFileReference();
-	//lineMaterial->LoadFileReference();
 
+	unlitMaterial = AssetManager::LoadEngineAsset<Material>("public_engine_assets/materials/unlitMaterial.mat");
+	XASSERT(unlitMaterial != nullptr, "[AssetManager::OnProjectLoaded] Unlit Material is null");
+	unlitMaterial->LoadFileReference();
+
+	Debug::Print("-------- Engine assets loaded --------", true);
 }
 
 void AssetManager::OnProjectUnloaded()
@@ -151,22 +113,13 @@ void AssetManager::OnProjectUnloaded()
 	defaultTexture.reset();
 
 	standardShader.reset();
-	standardOneLightEachShader.reset();
-	standardOnePointLightShader.reset();
-	standardOneSpotLightShader.reset();
-	standardOneDirectionalLightShader.reset();
-	standardVertexLightShader.reset();
+#if defined(ENABLE_SHADER_VARIANT_OPTIMIZATION)
+	standardShaderNoPointLight.reset();
+#endif
 	unlitShader.reset();
-	lineShader.reset();
 
 	standardMaterial.reset();
-	standardOneLightEachMaterial.reset();
-	standardOnePointLightMaterial.reset();
-	standardOneSpotLightMaterial.reset();
-	standardOneDirectionalLightMaterial.reset();
-	standardVertexLightMaterial.reset();
 	unlitMaterial.reset();
-	lineMaterial.reset();
 }
 
 #pragma region Add assets
@@ -389,49 +342,14 @@ void AssetManager::ForceDeleteFileReference(const std::shared_ptr<FileReference>
 		for (const ReflectiveEntry& reflectiveEntry : map)
 		{
 			const VariableReference& variableRef = reflectiveEntry.variable.value();
-			if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<MeshData>>>(&variableRef))
+			if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<FileReference>>>(&variableRef))
 			{
 				if (valuePtr->get() == fileReference)
 				{
 					valuePtr->get().reset();
 				}
 			}
-			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<AudioClip>>>(&variableRef))
-			{
-				if (valuePtr->get() == fileReference)
-				{
-					valuePtr->get().reset();
-				}
-			}
-			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<Texture>>>(&variableRef))
-			{
-				if (valuePtr->get() == fileReference)
-				{
-					valuePtr->get().reset();
-				}
-			}
-			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<Scene>>>(&variableRef))
-			{
-				if (valuePtr->get() == fileReference)
-				{
-					valuePtr->get().reset();
-				}
-			}
-			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<SkyBox>>>(&variableRef))
-			{
-				if (valuePtr->get() == fileReference)
-				{
-					valuePtr->get().reset();
-				}
-			}
-			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::shared_ptr<Font>>>(&variableRef))
-			{
-				if (valuePtr->get() == fileReference)
-				{
-					valuePtr->get().reset();
-				}
-			}
-			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::vector<std::shared_ptr<Texture>>>>(&variableRef))
+			else if (auto valuePtr = std::get_if<std::reference_wrapper<std::vector<std::shared_ptr<FileReference>>>>(&variableRef))
 			{
 				const size_t vectorSize = valuePtr->get().size();
 				for (size_t i = 0; i < vectorSize; i++)
@@ -583,7 +501,7 @@ std::string AssetManager::GetDefaultFileData(FileType fileType)
 		newFile = FileSystem::MakeFile("engine_assets/empty_default/material.mat");
 		break;
 	case FileType::File_Shader:
-		newFile = FileSystem::MakeFile("engine_assets/empty_default/standardShader.standardShader");
+		newFile = FileSystem::MakeFile("engine_assets/empty_default/shader.shader");
 		break;
 	default:
 		XASSERT(false, "[AssetManager::GetDefaultFileData] Invalid file type");

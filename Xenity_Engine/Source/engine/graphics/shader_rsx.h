@@ -37,16 +37,66 @@ public:
 	rsxProgramConst* m_projMatrix = nullptr;
 	rsxProgramConst* m_modelMatrix = nullptr;
 	rsxProgramConst* m_viewMatrix = nullptr;
+	rsxProgramConst* m_MVPMatrix = nullptr;
+	rsxProgramConst* m_normalMatrix = nullptr;
 	rsxProgramConst* m_ambientLightLocation= nullptr;
+	rsxProgramConst* m_tilingLocation = nullptr;
+	rsxProgramConst* m_offsetLocation = nullptr;
+
+	rsxProgramConst* m_usedPointLightCount = nullptr;
 
 	rsxProgramConst* m_color = nullptr;
 	rsxProgramAttrib* m_textureUnit = nullptr;
+	rsxProgramAttrib* m_lightingDataTextureUnit = nullptr;
 
 	/**
 	* @brief Use the shader program
 	*/
 	bool Use() override;
+	bool needBind = true;
+
 protected:
+	class PointLightVariableIds
+	{
+	public:
+		PointLightVariableIds() = delete;
+		explicit PointLightVariableIds(int index, rsxFragmentProgram* program);
+
+		//rsxProgramConst* index = nullptr;
+		rsxProgramConst* color = nullptr;
+		rsxProgramConst* position = nullptr;
+		rsxProgramConst* light_data = nullptr;
+	};
+
+	class DirectionalLightsVariableIds
+	{
+	public:
+		DirectionalLightsVariableIds() = delete;
+		explicit DirectionalLightsVariableIds(int index, rsxFragmentProgram* program);
+
+		//rsxProgramConst* index = nullptr;
+		rsxProgramConst* color = nullptr;
+		rsxProgramConst* direction = nullptr;
+	};
+
+
+	class SpotLightVariableIds
+	{
+	public:
+		SpotLightVariableIds() = delete;
+		explicit SpotLightVariableIds(int index, rsxFragmentProgram* program);
+
+		//rsxProgramConst* index = nullptr;
+		rsxProgramConst* color = nullptr;
+		rsxProgramConst* position = nullptr;
+		rsxProgramConst* direction = nullptr;
+		rsxProgramConst* constant = nullptr;
+		rsxProgramConst* linear = nullptr;
+		rsxProgramConst* quadratic = nullptr;
+		rsxProgramConst* cutOff = nullptr;
+		rsxProgramConst* outerCutOff = nullptr;
+	};
+
 	void Load() override;
 	void CreateShader(Shader::ShaderType type) override;
 
@@ -84,6 +134,8 @@ protected:
 	* @param scale The scale of the object
 	*/
 	void SetShaderModel(const Vector3& position, const Vector3& eulerAngle, const Vector3& scale) override;
+
+	void SetShaderOffsetAndTiling(const Vector2& offset, const Vector2& tiling) override;
 
 	void SetLightIndices(const LightsIndices& lightsIndices) override;
 
@@ -143,7 +195,13 @@ protected:
 
 	RsxProgramConstPair* FindOrAddAttributId(const std::string& attribut);
 
+	std::vector<PointLightVariableIds> m_pointlightVariableIds;
+	std::vector<DirectionalLightsVariableIds> m_directionallightVariableIds;
+	std::vector<SpotLightVariableIds> m_spotlightVariableIds;
 	std::unordered_map<std::string, RsxProgramConstPair> m_uniformsIds;
+	std::vector<rsxProgramConst*> m_directionalLightIndicesLocations;
+	std::vector<rsxProgramConst*> m_pointLightIndicesLocations;
+	std::vector<rsxProgramConst*> m_spotLightIndicesLocations;
 };
 
 #endif

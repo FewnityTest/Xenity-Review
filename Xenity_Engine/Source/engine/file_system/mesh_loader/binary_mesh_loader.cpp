@@ -146,12 +146,28 @@ bool BinaryMeshLoader::LoadMesh(MeshData& mesh)
 		if(mesh.m_hasIndices)
 		{
 			memcpy(subMesh->indices, fileData, indexMemSize);
+			
+			std::string indicesStr = "Indices: ";
+			for (int i = 0; i < subMesh->indexMemSize; i++)
+			{
+				indicesStr += std::to_string(((unsigned char*)fileData)[i]);
+				//meshFile << std::hex << ((unsigned short*)subMesh->indices)[i] << " ";
+			}
+			Debug::Print(indicesStr);
 
 #if defined(__PS3__)
 			for (int indexIndex = 0; indexIndex < index_count; indexIndex++)
 			{
-				unsigned short& index = ((unsigned short*)subMesh->indices)[indexIndex];
-				index = EndianUtils::SwapEndian(index);
+				if (subMesh->isShortIndices)
+				{
+					unsigned short& index = ((unsigned short*)subMesh->indices)[indexIndex];
+					index = EndianUtils::SwapEndian(index);
+				}
+				else 
+				{
+					unsigned int& index = ((unsigned int*)subMesh->indices)[indexIndex];
+					index = EndianUtils::SwapEndian(index);
+				}
 			}
 #endif // defined(__PS3__)
 		}

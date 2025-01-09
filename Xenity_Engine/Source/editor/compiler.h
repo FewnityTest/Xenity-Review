@@ -176,6 +176,7 @@ public:
 private:
 
 	static void DeleteTempFiles(const CompilerParams& params);
+	static void CleanDestinationFolder(const std::string& exportPath);
 
 	/**
 	* @brief Export all game's files into the build folder
@@ -270,6 +271,7 @@ private:
 
 	static void CopyAssetsToDocker(const CompilerParams& params);
 
+	static void FixCompileShadersScript();
 
 	static Event<CompilerParams, bool> OnCompilationEndedEvent;
 	static Event<CompilerParams> OnCompilationStartedEvent;

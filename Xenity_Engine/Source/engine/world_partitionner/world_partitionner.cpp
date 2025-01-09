@@ -47,11 +47,11 @@ bool cubeIntersectsSphere(const Vector3Fast& cubeMin, int cubeSize, const Vector
 		float sphereCoord = (&sphereCenter.x)[i];
 		if (sphereCoord < (&cubeMin.x)[i])
 		{
-			dmin += std::pow(sphereCoord - (&cubeMin.x)[i], 2);
+			dmin += static_cast<float>(std::pow(sphereCoord - (&cubeMin.x)[i], 2));
 		}
 		else if (sphereCoord > cubeMaxCoord)
 		{
-			dmin += std::pow(sphereCoord - cubeMaxCoord, 2);
+			dmin += static_cast<float>(std::pow(sphereCoord - cubeMaxCoord, 2));
 		}
 	}
 
@@ -215,9 +215,9 @@ void WorldPartitionner::ProcessLight(Light* light)
 
 	XASSERT(light, "The light is null");
 
+	RemoveLight(light);
 	if (light->GetType() == LightType::Point || light->GetType() == LightType::Spot)
 	{
-		RemoveLight(light);
 		if (light->IsEnabled() && light->GetGameObject()->IsLocalActive())
 		{
 			std::vector<Vector3Fast> intersectedCubes;

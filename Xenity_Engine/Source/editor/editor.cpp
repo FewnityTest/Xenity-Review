@@ -20,6 +20,7 @@
 #include <editor/compiler.h>
 #include <editor/command/command_manager.h>
 #include <editor/ui/editor_ui.h>
+#include <editor/update_checker.h>
 #include "command/commands/delete.h"
 #include "command/commands/create.h"
 #include "file_handler.h"
@@ -43,7 +44,6 @@
 #include <engine/debug/debug.h>
 #include <engine/event_system/event_system.h>
 #include <engine/debug/stack_debug_object.h>
-
 using json = nlohmann::json;
 
 std::weak_ptr<AudioSource> Editor::audioSource;
@@ -78,7 +78,11 @@ bool Editor::isToolLocalMode;
 void Editor::Init()
 {
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
-
+	const bool updateFound = UpdateChecker::CheckForUpdate();
+	if (updateFound)
+	{
+		Debug::PrintWarning("An update is available, please download the latest version of the engine");
+	}
 	ClassRegistry::RegisterMenus();
 	LoadMenuSettings();
 	SaveMenuSettings();
@@ -192,6 +196,7 @@ void Editor::CreateNewMenuSettings()
 	AddMenuSetting(menuSettingList, "BuildSettingsMenu", false, true);
 	AddMenuSetting(menuSettingList, "EngineAssetManagerMenu", false, true);
 	AddMenuSetting(menuSettingList, "EngineDebugMenu", false, true);
+	AddMenuSetting(menuSettingList, "DataBaseCheckerMenu", false, true);
 
 	AddMenuSetting(menuSettingList, "FileExplorerMenu", true, false);
 	AddMenuSetting(menuSettingList, "HierarchyMenu", true, false);
@@ -539,7 +544,7 @@ void Editor::CreateEmpty()
 {
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
 
-	auto command = std::make_shared<InspectorCreateGameObjectCommand>(std::vector<std::weak_ptr<GameObject>>(), 0);
+	auto command = std::make_shared<InspectorCreateGameObjectCommand>(std::vector<std::weak_ptr<GameObject>>(), CreateGameObjectMode::CreateEmpty);
 	CommandManager::AddCommandAndExecute(command);
 }
 
@@ -547,7 +552,7 @@ void Editor::CreateEmptyChild()
 {
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
 
-	auto command = std::make_shared<InspectorCreateGameObjectCommand>(selectedGameObjects, 1);
+	auto command = std::make_shared<InspectorCreateGameObjectCommand>(selectedGameObjects, CreateGameObjectMode::CreateChild);
 	CommandManager::AddCommandAndExecute(command);
 }
 
@@ -555,7 +560,7 @@ void Editor::CreateEmptyParent()
 {
 	STACK_DEBUG_OBJECT(STACK_HIGH_PRIORITY);
 
-	auto command = std::make_shared<InspectorCreateGameObjectCommand>(selectedGameObjects, 2);
+	auto command = std::make_shared<InspectorCreateGameObjectCommand>(selectedGameObjects, CreateGameObjectMode::CreateParent);
 	CommandManager::AddCommandAndExecute(command);
 }
 

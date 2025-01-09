@@ -32,7 +32,7 @@ void Cooker::CookAssets(const CookSettings& settings)
 
 	const std::string projectAssetFolder = ProjectManager::GetProjectFolderPath();
 	const size_t projectFolderPathLen = projectAssetFolder.size();
-	const std::vector<uint64_t> ids = ProjectManager::GetAllUsedFileByTheGame();
+	const std::set<uint64_t> ids = ProjectManager::GetAllUsedFileByTheGame();
 
 	// Find file from id and cook it
 	for (uint64_t id : ids)
@@ -41,13 +41,13 @@ void Cooker::CookAssets(const CookSettings& settings)
 		if (fileInfo)
 		{
 			std::string newPath;
-			if (fileInfo->path[0] == '.')
+			if (fileInfo->file->GetPath()[0] == '.')
 			{
-				newPath = fileInfo->path.substr(2);
+				newPath = fileInfo->file->GetPath().substr(2);
 			}
 			else
 			{
-				newPath = fileInfo->path.substr(projectFolderPathLen, fileInfo->path.size() - projectFolderPathLen);
+				newPath = fileInfo->file->GetPath().substr(projectFolderPathLen, fileInfo->file->GetPath().size() - projectFolderPathLen);
 			}
 
 			// Create the destination folder for the file
@@ -58,18 +58,27 @@ void Cooker::CookAssets(const CookSettings& settings)
 			CookAsset(settings, *fileInfo, folderToCreate, newPath);
 		}
 	}
-
-	fileDataBase.SaveToFile(settings.exportPath + "db.bin");
+	IntegrityState integrityState = fileDataBase.CheckIntegrity();
+	if (integrityState != IntegrityState::Integrity_Ok)
+	{
+		Debug::PrintError("[Cooker::CookAssets] Data base integrity check failed");
+	}
+	fileDataBase.SaveToFile(settings.exportPath + "db.xenb");
 }
 
 void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, const std::string& exportFolderPath, const std::string& partialFilePath)
 {
 	const std::string exportPath = exportFolderPath + "/" + fileInfo.file->GetFileName() + fileInfo.file->GetFileExtension();
 
+	if (fileInfo.type != FileType::File_Shader && settings.exportShadersOnly)
+	{
+		return;
+	}
+
 	// We copy the cooked file to the export folder, and then we add the copied file to the binary file
 	if (fileInfo.type == FileType::File_Texture) // Cook texture
 	{
-		const std::string texturePath = fileInfo.path;
+		const std::string texturePath = fileInfo.file->GetPath();
 
 		int width, height, channels;
 		unsigned char* imageData = stbi_load(texturePath.c_str(), &width, &height, &channels, 4);
@@ -132,7 +141,20 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 			meshFile.write((char*)&subMesh->indexMemSize, sizeof(uint32_t));
 			meshFile.write((char*)subMesh->data, subMesh->vertexMemSize);
 			meshFile.write((char*)subMesh->indices, subMesh->indexMemSize);
+			// Print in hexa the data of indices
+			std::string indicesStr = "Indices: ";
+			for (int i = 0; i < subMesh->indexMemSize; i++)
+			{
+				indicesStr += std::to_string(((unsigned char*)subMesh->indices)[i]);
+				//meshFile << std::hex << ((unsigned short*)subMesh->indices)[i] << " ";
+			}
+			Debug::Print(indicesStr);
 		}
+
+
+
+
+
 		meshFile.close();
 	}
 	else if (fileInfo.type == FileType::File_Shader) // Cook shader
@@ -168,7 +190,7 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 				fragmentFile->Write(fragmentShaderCode);
 				fragmentFile->Close();
 
-				CopyUtils::AddCopyEntry(false, fileInfo.path, exportPath);
+				CopyUtils::AddCopyEntry(false, fileInfo.file->GetPath(), exportPath);
 			}
 			else
 			{
@@ -181,13 +203,13 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 				const std::shared_ptr<File> vertexCodeFile = FileSystem::MakeFile(vertexShaderCodePath);
 				const std::shared_ptr<File> fragmentCodeFile = FileSystem::MakeFile(fragmentShaderCodePath);
 
-				bool vOpenResult = vertexCodeFile->Open(FileMode::ReadOnly);
+				const bool vOpenResult = vertexCodeFile->Open(FileMode::ReadOnly);
 				if (!vOpenResult) 
 				{
 					Debug::PrintError("[Cooker::CookAsset] Failed to load shader code: " + vertexShaderCodePath);
 					return;
 				}
-				bool fOpenResult = fragmentCodeFile->Open(FileMode::ReadOnly);
+				const bool fOpenResult = fragmentCodeFile->Open(FileMode::ReadOnly);
 				if (!fOpenResult)
 				{
 					Debug::PrintError("[Cooker::CookAsset] Failed to load shader code: " + fragmentShaderCodePath);
@@ -203,8 +225,8 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 				unsigned char* fragmentCodeBinary = fragmentCodeFile->ReadAllBinary(fragmentBinaryCodeSize);
 				fragmentCodeFile->Close();
 
-				uint32_t vertexBinaryCodeSizeFixed = vertexBinaryCodeSize;
-				uint32_t fragmentBinaryCodeSizeFixed = fragmentBinaryCodeSize;
+				const uint32_t vertexBinaryCodeSizeFixed = static_cast<uint32_t>(vertexBinaryCodeSize);
+				const uint32_t fragmentBinaryCodeSizeFixed = static_cast<uint32_t>(fragmentBinaryCodeSize);
 
 				// REMINDER: NEVER WRITE A SIZE_T TO A FILE, ALWAYS CONVERT IT TO A FIXED SIZE TYPE
 				std::ofstream shaderFile = std::ofstream(exportPath, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
@@ -220,21 +242,21 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 		}
 		else 
 		{
-			CopyUtils::AddCopyEntry(false, fileInfo.path, exportPath);
+			CopyUtils::AddCopyEntry(false, fileInfo.file->GetPath(), exportPath);
 		}
 	}
 	else // If file can't be cooked, just copy it
 	{
-		CopyUtils::AddCopyEntry(false, fileInfo.path, exportPath);
+		CopyUtils::AddCopyEntry(false, fileInfo.file->GetPath(), exportPath);
 	}
 
 	// Copy the raw meta file, maybe we should cook it too later
-	CopyUtils::AddCopyEntry(false, fileInfo.path + ".meta", exportPath + ".meta");
-	const uint64_t metaSize = fs::file_size(fileInfo.path + ".meta");
+	CopyUtils::AddCopyEntry(false, fileInfo.file->GetPath() + ".meta", exportPath + ".meta");
+	const uint64_t metaSize = fs::file_size(fileInfo.file->GetPath() + ".meta");
 
 	CopyUtils::ExecuteCopyEntries();
 
-	uint64_t cookedFileSize = cookedFileSize = fs::file_size(exportPath.c_str());
+	const uint64_t cookedFileSize = fs::file_size(exportPath.c_str());
 
 	// Do not include audio in the binary file
 	size_t dataOffset = 0;
@@ -265,6 +287,7 @@ void Cooker::CookAsset(const CookSettings& settings, const FileInfo& fileInfo, c
 	else
 	{
 		Debug::PrintError("[Cooker::CookAsset] Failed to open meta file: " + exportPath + ".meta");
+		return;
 	}
 	FileSystem::s_fileSystem->Delete(exportPath + ".meta");
 

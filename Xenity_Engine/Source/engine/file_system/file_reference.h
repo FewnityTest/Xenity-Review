@@ -30,7 +30,7 @@ enum class FileStatus
 * @brief Class implemented by asset classes (Texture, Audio Clip...)
 * @brief Used to implement Load/Unload function and to store file infos (type, size...)
 */
-class API FileReference : public std::enable_shared_from_this<FileReference>
+class API FileReference : public Reflective, public std::enable_shared_from_this<FileReference>
 {
 public:
 	FileReference() = default;
@@ -51,13 +51,6 @@ public:
 	* @brief event function called when a file has finshed to load
 	*/
 	virtual void OnLoadFileReferenceFinished() { }
-
-	virtual void OnReflectionUpdated() { }
-
-	virtual ReflectiveData GetReflectiveData()
-	{
-		return ReflectiveData();
-	}
 
 	/**
 	* @brief Get reflection of the file meta
@@ -113,15 +106,15 @@ protected:
 	friend class EngineDebugMenu;
 
 	std::shared_ptr<File> m_file = nullptr;
-	FileType m_fileType = FileType::File_Other;
 	uint64_t m_filePosition = 0;
 	uint64_t m_fileSize = 0;
 	uint64_t m_metaPosition = 0;
 	uint64_t m_metaSize = 0;
 
 	uint64_t m_fileId = -1;
+	FileType m_fileType = FileType::File_Other;
+	FileStatus m_fileStatus = FileStatus::FileStatus_Not_Loaded;
 
 	bool m_isMetaDirty = false;
-	FileStatus m_fileStatus = FileStatus::FileStatus_Not_Loaded;
 };
 
